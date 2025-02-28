@@ -19,8 +19,8 @@ stow nvim zshrc waybar hyprland hypridle ....
 ```
 
 🛠 Tools Used:
- 🖼 Hyprland (Wayland compositor)
- 🎨 Waybar (status bar)
- ⚡ Neovim (with Gruvbox colors)
- 🐚 Zsh + Oh My Zsh
- 📦 GNU Stow (for dotfile management)
+- 🖼 Hyprland (Wayland compositor)
+- 🎨 Waybar (status bar)
+- ⚡ Neovim (with Gruvbox colors)
+- 🐚 Zsh + Oh My Zsh
+- 📦 GNU Stow (for dotfile management)
