@@ -1,0 +1,72 @@
+@define-color background #282828;
+@define-color border #928374;
+@define-color input-bg #1d2021;
+@define-color text #ebdbb2;
+@define-color highlight #1d2021;
+
+/* General */
+* {
+  font-family: 'CaskaydiaCove Nerd Font', monospace;
+  font-size: 18px;
+}
+
+/* Window */
+window {
+  margin: 0px;
+  padding: 10px;
+  border: 1px solid @border;
+  border-radius: 8px;
+  background-color: @background;
+}
+
+/* Inner Box */
+#inner-box {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  background-color: @background;
+}
+
+/* Outer Box */
+#outer-box {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  background-color: @background;
+}
+
+/* Scroll */
+#scroll {
+  margin: 0px;
+  padding: 10px;
+  border: none;
+  background-color: @background;
+}
+
+/* Input */
+#input {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  border-radius: 0.1em;
+  color: @text;
+  background-color: @input-bg;
+}
+
+/* Text */
+#text {
+  margin: 5px;
+  border: none;
+  color: @text;
+}
+
+/* Entry */
+#entry {
+  background-color: @background;
+}
+
+/* Selected Entry */
+#entry:selected {
+  background-color: @highlight;
+}
+
