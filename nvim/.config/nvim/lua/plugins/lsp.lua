@@ -7,6 +7,9 @@ return {
       "j-hui/fidget.nvim",
       "hrsh7th/nvim-cmp",
       "hrsh7th/cmp-nvim-lsp",
+      "L3MON4D3/LuaSnip",
+      "saadparwaiz1/cmp_luasnip",
+      "onsails/lspkind.nvim",
     },
     config = function()
       -- Diagnostic keymaps
@@ -15,93 +18,62 @@ return {
       vim.keymap.set("n", "<leader>dd", vim.diagnostic.open_float)
       vim.keymap.set("n", "<leader>ds", vim.diagnostic.setloclist)
 
-      local cmp_ok, cmp_nvim_lsp = pcall(require, "cmp_nvim_lsp")
-      if cmp_ok then
-        capabilities = cmp_nvim_lsp.default_capabilities()
-      else
-        print("Warning: cmp-nvim-lsp not found! Run :Lazy sync")
-      end
+      -- Setup nvim-cmp
+      local cmp = require("cmp")
+      local lspkind = require("lspkind")
 
-      local capabilities = vim.lsp.protocol.make_client_capabilities()
-      capabilities = cmp_nvim_lsp.default_capabilities(capabilities)
+      cmp.setup({
+        snippet = {
+          expand = function(args)
+            require("luasnip").lsp_expand(args.body)
+          end,
+        },
+        mapping = cmp.mapping.preset.insert({
+          ["<C-d>"] = cmp.mapping.scroll_docs(-4),
+          ["<C-f>"] = cmp.mapping.scroll_docs(4),
+          ["<C-Space>"] = cmp.mapping.complete(),
+          ["<CR>"] = cmp.mapping.confirm({
+            behavior = cmp.ConfirmBehavior.Replace,
+            select = true,
+          }),
+        }),
+        sources = cmp.config.sources({
+          { name = "nvim_lsp" },
+          { name = "luasnip" },
+        }),
+        formatting = {
+          format = lspkind.cmp_format({
+            mode = "symbol_text",
+            maxwidth = 50,
+            ellipsis_char = "...",
+          }),
+        },
+      })
 
-      -- Setup Mason
-      require("mason").setup()
+      local cmp_nvim_lsp = require("cmp_nvim_lsp")
+      local capabilities = cmp_nvim_lsp.default_capabilities()
+
+      -- Setup Mason with improved error handling
+      require("mason").setup({
+        registries = {
+          "github:mason-org/mason-registry",
+        },
+        PATH = "prepend", -- Ensure Mason binaries are found first
+      })
+
       require("mason-lspconfig").setup({
         ensure_installed = { "pyright", "tailwindcss", "volar", "eslint" },
-        automatic_installation = true,
+        automatic_installation = {
+          ignore = {}, -- Empty list means install all missing servers
+          interval = 15, -- Check interval in minutes
+          retry = true, -- Retry failed installations
+        },
       })
 
       -- Setup LSP
       local lspconfig = require("lspconfig")
 
-      lspconfig.pyright.setup({
-        capabilities = capabilities,
-      })
-
-      lspconfig.ruff_lsp.setup({
-        capabilities = capabilities,
-      })
-
-      lspconfig.tsserver.setup({
-        capabilities = capabilities,
-      })
-
-      -- Python virtual env detection
-      local util = require("lspconfig/util")
-      local path = util.path or require("lspconfig.util").path
-
-      local function file_exists(name)
-        local f = io.open(name, "r")
-        if f ~= nil then
-          io.close(f)
-          return true
-        else
-          return false
-        end
-      end
-
-      local function get_python_path(workspace)
-        local util = require("lspconfig/util")
-        local path = util.path or require("lspconfig.util").path
-
-        -- Check if a virtual environment is activated
-        if vim.env.VIRTUAL_ENV then
-          return vim.env.VIRTUAL_ENV .. "/bin/python"
-        end
-
-        -- Check if a virtual environment exists in the workspace
-        for _, pattern in ipairs({ "*", ".*" }) do
-          local match = vim.fn.glob(path.join(workspace, pattern, "pyvenv.cfg"))
-          if match and match ~= "" then
-            return path.join(path.dirname(match), "bin", "python")
-          end
-        end
-
-        -- Check a default virtual environment location
-        local default_venv_path = path.join(vim.env.HOME, "virtualenvs", "nvim-venv", "bin", "python")
-        if file_exists(default_venv_path) then
-          return default_venv_path
-        end
-
-        -- Get system Python
-        local system_python = vim.fn.exepath("python3") or vim.fn.exepath("python")
-        if system_python and system_python ~= "" then
-          return system_python
-        end
-
-        -- Fallback: Hardcoded system Python path
-        return "/usr/bin/python3"
-      end
-
-      lspconfig.pyright.setup({
-        capabilities = capabilities,
-        before_init = function(_, config)
-          config.settings.python.pythonPath = get_python_path(config.root_dir)
-        end,
-      })
-
-      -- Enable keymaps for LSP
+      -- Common LSP setup
       local on_attach = function(_, bufnr)
         local function nmap(keys, func, desc)
           if desc then
@@ -119,14 +91,38 @@ return {
         nmap("<leader>ws", require("telescope.builtin").lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
         nmap("K", vim.lsp.buf.hover, "Hover Documentation")
       end
-      require("lspconfig").pyright.setup({
+
+      -- Python LSP setup
+      local function get_python_path(workspace)
+        -- Conda environment (base or others)
+        if vim.env.CONDA_PREFIX then
+          return vim.env.CONDA_PREFIX .. "/bin/python"
+        end
+        -- fallback to virtualenv
+        if vim.env.VIRTUAL_ENV then
+          return vim.env.VIRTUAL_ENV .. "/bin/python"
+        end
+        -- fallback to .venv in project
+        local match = vim.fn.glob(workspace .. "/.venv/bin/python")
+        if match ~= "" then
+          return match
+        end
+        -- system default
+        return "python3"
+      end
+
+      lspconfig.pyright.setup({
+        capabilities = capabilities,
         on_attach = on_attach,
+        before_init = function(_, config)
+          config.settings.python.pythonPath = get_python_path(config.root_dir)
+        end,
         settings = {
           python = {
             analysis = {
-              typeCheckingMode = "off", -- 🔥 Disables strict type checking
-              autoImportCompletions = true, -- Improves auto-import suggestions
-              useLibraryCodeForTypes = true, -- Helps with Pandas type inference
+              typeCheckingMode = "off",
+              autoImportCompletions = true,
+              useLibraryCodeForTypes = true,
             },
             formatting = {
               provider = "black",
@@ -135,8 +131,22 @@ return {
         },
       })
 
+      -- Other LSP servers
+      lspconfig.ruff_lsp.setup({ capabilities = capabilities })
+      lspconfig.tsserver.setup({ capabilities = capabilities })
+
       -- Enable Fidget for LSP Status
       require("fidget").setup({})
     end,
+  },
+
+  -- Additional LSP-related plugins
+  { "onsails/lspkind.nvim" },
+  {
+    "hrsh7th/nvim-cmp",
+    dependencies = {
+      "L3MON4D3/LuaSnip",
+      "saadparwaiz1/cmp_luasnip",
+    },
   },
 }
