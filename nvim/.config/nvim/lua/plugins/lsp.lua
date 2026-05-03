@@ -1,79 +1,36 @@
 return {
+  -- LSP Configuration
   {
     "neovim/nvim-lspconfig",
     dependencies = {
-      "williamboman/mason.nvim",
-      "williamboman/mason-lspconfig.nvim",
+      "mason-org/mason.nvim",
+      "mason-org/mason-lspconfig.nvim",
       "j-hui/fidget.nvim",
-      "hrsh7th/nvim-cmp",
-      "hrsh7th/cmp-nvim-lsp",
-      "L3MON4D3/LuaSnip",
-      "saadparwaiz1/cmp_luasnip",
-      "onsails/lspkind.nvim",
     },
     config = function()
-      -- Diagnostic keymaps
-      vim.keymap.set("n", "<leader>dp", vim.diagnostic.goto_prev)
-      vim.keymap.set("n", "<leader>dn", vim.diagnostic.goto_next)
-      vim.keymap.set("n", "<leader>dd", vim.diagnostic.open_float)
-      vim.keymap.set("n", "<leader>ds", vim.diagnostic.setloclist)
+      local lspconfig = require("lspconfig")
 
-      -- Setup nvim-cmp
-      local cmp = require("cmp")
-      local lspkind = require("lspkind")
+      -- Get capabilities from blink.cmp (LazyVim default) or fallback
+      local capabilities
+      local ok, blink = pcall(require, "blink.cmp")
+      if ok then
+        capabilities = blink.get_lsp_capabilities()
+      else
+        capabilities = vim.lsp.protocol.make_client_capabilities()
+      end
 
-      cmp.setup({
-        snippet = {
-          expand = function(args)
-            require("luasnip").lsp_expand(args.body)
-          end,
-        },
-        mapping = cmp.mapping.preset.insert({
-          ["<C-d>"] = cmp.mapping.scroll_docs(-4),
-          ["<C-f>"] = cmp.mapping.scroll_docs(4),
-          ["<C-Space>"] = cmp.mapping.complete(),
-          ["<CR>"] = cmp.mapping.confirm({
-            behavior = cmp.ConfirmBehavior.Replace,
-            select = true,
-          }),
-        }),
-        sources = cmp.config.sources({
-          { name = "nvim_lsp" },
-          { name = "luasnip" },
-        }),
-        formatting = {
-          format = lspkind.cmp_format({
-            mode = "symbol_text",
-            maxwidth = 50,
-            ellipsis_char = "...",
-          }),
-        },
-      })
-
-      local cmp_nvim_lsp = require("cmp_nvim_lsp")
-      local capabilities = cmp_nvim_lsp.default_capabilities()
-
-      -- Setup Mason with improved error handling
+      -- Setup Mason
       require("mason").setup({
-        registries = {
-          "github:mason-org/mason-registry",
-        },
-        PATH = "prepend", -- Ensure Mason binaries are found first
+        registries = { "github:mason-org/mason-registry" },
+        PATH = "prepend",
       })
 
       require("mason-lspconfig").setup({
-        ensure_installed = { "pyright", "tailwindcss", "volar", "eslint" },
-        automatic_installation = {
-          ignore = {}, -- Empty list means install all missing servers
-          interval = 15, -- Check interval in minutes
-          retry = true, -- Retry failed installations
-        },
+        ensure_installed = { "pyright", "ruff", "tailwindcss", "vtsls", "eslint" },
+        automatic_installation = true,
       })
 
-      -- Setup LSP
-      local lspconfig = require("lspconfig")
-
-      -- Common LSP setup
+      -- Shared on_attach function (LSP keymaps)
       local on_attach = function(_, bufnr)
         local function nmap(keys, func, desc)
           if desc then
@@ -81,36 +38,58 @@ return {
           end
           vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
         end
-        nmap("<leader>lf", vim.lsp.buf.format, "[L]SP [F]ormat")
-        nmap("<leader>rn", vim.lsp.buf.rename, "[R]e[n]ame")
-        nmap("gd", vim.lsp.buf.definition, "[G]oto [D]efinition")
-        nmap("gr", require("telescope.builtin").lsp_references, "[G]oto [R]eferences")
-        nmap("gt", vim.lsp.buf.type_definition, "Type [D]efinition")
-        nmap("<leader>ca", vim.lsp.buf.code_action, "[C]ode [A]ction")
-        nmap("<leader>ds", require("telescope.builtin").lsp_document_symbols, "[D]ocument [S]ymbols")
-        nmap("<leader>ws", require("telescope.builtin").lsp_dynamic_workspace_symbols, "[W]orkspace [S]ymbols")
+
+        nmap("<leader>rn", vim.lsp.buf.rename, "Rename")
+        nmap("<leader>ca", vim.lsp.buf.code_action, "Code Action")
+        nmap("gd", vim.lsp.buf.definition, "Goto Definition")
+        nmap("gt", vim.lsp.buf.type_definition, "Type Definition")
         nmap("K", vim.lsp.buf.hover, "Hover Documentation")
+        nmap("gD", vim.lsp.buf.declaration, "Goto Declaration")
+        nmap("<leader>lf", vim.lsp.buf.format, "Format Buffer")
+
+        -- Telescope-based LSP lookups (wrapped in functions for lazy-loading safety)
+        nmap("gr", function() require("telescope.builtin").lsp_references() end, "Goto References")
+        nmap("<leader>ds", function() require("telescope.builtin").lsp_document_symbols() end, "Document Symbols")
+        nmap("<leader>ws", function() require("telescope.builtin").lsp_dynamic_workspace_symbols() end, "Workspace Symbols")
+
+        -- Diagnostic keymaps
+        nmap("<leader>dp", vim.diagnostic.goto_prev, "Prev Diagnostic")
+        nmap("<leader>dn", vim.diagnostic.goto_next, "Next Diagnostic")
+        nmap("<leader>dd", vim.diagnostic.open_float, "Line Diagnostic")
+        nmap("<leader>dl", vim.diagnostic.setloclist, "Diagnostic List")
       end
 
-      -- Python LSP setup
+      -- Python Venv Detection (supports uv, conda, virtualenv, venv)
       local function get_python_path(workspace)
-        -- Conda environment (base or others)
+        -- 1. uv custom environment (UV_PROJECT_ENVIRONMENT=path/to/venv)
+        if vim.env.UV_PROJECT_ENVIRONMENT then
+          local uv_python = vim.env.UV_PROJECT_ENVIRONMENT .. "/bin/python"
+          if vim.fn.executable(uv_python) == 1 then
+            return uv_python
+          end
+        end
+        -- 2. Conda
         if vim.env.CONDA_PREFIX then
           return vim.env.CONDA_PREFIX .. "/bin/python"
         end
-        -- fallback to virtualenv
+        -- 3. Active virtualenv (also set by `uv run`)
         if vim.env.VIRTUAL_ENV then
           return vim.env.VIRTUAL_ENV .. "/bin/python"
         end
-        -- fallback to .venv in project
-        local match = vim.fn.glob(workspace .. "/.venv/bin/python")
-        if match ~= "" then
-          return match
+        -- 4. Project-local .venv (default for uv venv / python -m venv)
+        local venv = vim.fn.glob(workspace .. "/.venv/bin/python")
+        if venv ~= "" then
+          return venv
         end
-        -- system default
+        -- 5. Fallback: venv/ directory
+        local venv2 = vim.fn.glob(workspace .. "/venv/bin/python")
+        if venv2 ~= "" then
+          return venv2
+        end
         return "python3"
       end
 
+      -- Server Setup
       lspconfig.pyright.setup({
         capabilities = capabilities,
         on_attach = on_attach,
@@ -124,29 +103,21 @@ return {
               autoImportCompletions = true,
               useLibraryCodeForTypes = true,
             },
-            formatting = {
-              provider = "black",
-            },
           },
         },
       })
 
-      -- Other LSP servers
-      lspconfig.ruff_lsp.setup({ capabilities = capabilities })
-      lspconfig.tsserver.setup({ capabilities = capabilities })
+      lspconfig.ruff.setup({ capabilities = capabilities, on_attach = on_attach })
 
-      -- Enable Fidget for LSP Status
+      -- TypeScript: ts_ls (modern) with fallback to tsserver (legacy)
+      if lspconfig.ts_ls then
+        lspconfig.ts_ls.setup({ capabilities = capabilities, on_attach = on_attach })
+      else
+        lspconfig.tsserver.setup({ capabilities = capabilities, on_attach = on_attach })
+      end
+
+      -- Fidget (Status notifications)
       require("fidget").setup({})
     end,
-  },
-
-  -- Additional LSP-related plugins
-  { "onsails/lspkind.nvim" },
-  {
-    "hrsh7th/nvim-cmp",
-    dependencies = {
-      "L3MON4D3/LuaSnip",
-      "saadparwaiz1/cmp_luasnip",
-    },
   },
 }

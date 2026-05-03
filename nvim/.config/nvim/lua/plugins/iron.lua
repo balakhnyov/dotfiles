@@ -1,6 +1,10 @@
 return {
   {
     "hkupty/iron.nvim",
+    keys = {
+      { "<space>rf", "<cmd>IronFocus<cr>", desc = "Iron Focus" },
+      { "<space>rh", "<cmd>IronHide<cr>", desc = "Iron Hide" },
+    },
     config = function()
       local iron = require("iron.core")
       local view = require("iron.view")
@@ -45,9 +49,6 @@ return {
         highlight = { italic = true },
         ignore_blank_lines = true,
       })
-
-      vim.keymap.set("n", "<space>rf", "<cmd>IronFocus<cr>")
-      vim.keymap.set("n", "<space>rh", "<cmd>IronHide<cr>")
     end,
   },
 }

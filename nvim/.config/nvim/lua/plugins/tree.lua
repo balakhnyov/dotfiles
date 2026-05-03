@@ -1,5 +1,21 @@
 return {
-  "echasnovski/mini.files",
+  "nvim-mini/mini.files",
+  keys = {
+    {
+      "<leader>fm",
+      function()
+        require("mini.files").open(vim.api.nvim_buf_get_name(0), true)
+      end,
+      desc = "Mini.Files (Current File)",
+    },
+    {
+      "<leader>fM",
+      function()
+        require("mini.files").open(vim.uv.cwd(), true)
+      end,
+      desc = "Mini.Files (CWD)",
+    },
+  },
   opts = {
     windows = {
       preview = true,
@@ -7,41 +23,19 @@ return {
       width_preview = 30,
     },
     options = {
-      -- Whether to use for editing directories
-      -- Disabled by default in LazyVim because neo-tree is used for that
       use_as_default_explorer = true,
-    },
-  },
-  keys = {
-    {
-      "<leader>fm",
-      function()
-        require("mini.files").open(vim.api.nvim_buf_get_name(0), true)
-      end,
-      desc = "Open mini.files (Directory of Current File)",
-    },
-    {
-      "<leader>fM",
-      function()
-        require("mini.files").open(vim.uv.cwd(), true)
-      end,
-      desc = "Open mini.files (cwd)",
     },
   },
   config = function(_, opts)
     require("mini.files").setup(opts)
 
     local show_dotfiles = true
-    local filter_show = function(fs_entry)
-      return true
-    end
-    local filter_hide = function(fs_entry)
-      return not vim.startswith(fs_entry.name, ".")
-    end
 
     local toggle_dotfiles = function()
       show_dotfiles = not show_dotfiles
-      local new_filter = show_dotfiles and filter_show or filter_hide
+      local new_filter = show_dotfiles
+          and function() return true end
+          or function(fs_entry) return not vim.startswith(fs_entry.name, ".") end
       require("mini.files").refresh({ content = { filter = new_filter } })
     end
 
@@ -68,7 +62,7 @@ return {
     end
 
     local files_set_cwd = function()
-      local cur_entry_path = MiniFiles.get_fs_entry().path
+      local cur_entry_path = require("mini.files").get_fs_entry().path
       local cur_directory = vim.fs.dirname(cur_entry_path)
       if cur_directory ~= nil then
         vim.fn.chdir(cur_directory)
@@ -80,24 +74,19 @@ return {
       callback = function(args)
         local buf_id = args.data.buf_id
 
-        vim.keymap.set(
-          "n",
-          opts.mappings and opts.mappings.toggle_hidden or "g.",
-          toggle_dotfiles,
-          { buffer = buf_id, desc = "Toggle hidden files" }
-        )
+        vim.keymap.set("n", "g.", toggle_dotfiles, { buffer = buf_id, desc = "Toggle hidden files" })
+        vim.keymap.set("n", "gc", files_set_cwd, { buffer = buf_id, desc = "Set cwd" })
 
-        vim.keymap.set(
-          "n",
-          opts.mappings and opts.mappings.change_cwd or "gc",
-          files_set_cwd,
-          { buffer = args.data.buf_id, desc = "Set cwd" }
-        )
+        map_split(buf_id, "<C-w>s", "horizontal", false)
+        map_split(buf_id, "<C-w>v", "vertical", false)
+        map_split(buf_id, "<C-w>S", "horizontal", true)
+        map_split(buf_id, "<C-w>V", "vertical", true)
 
-        map_split(buf_id, opts.mappings and opts.mappings.go_in_horizontal or "<C-w>s", "horizontal", false)
-        map_split(buf_id, opts.mappings and opts.mappings.go_in_vertical or "<C-w>v", "vertical", false)
-        map_split(buf_id, opts.mappings and opts.mappings.go_in_horizontal_plus or "<C-w>S", "horizontal", true)
-        map_split(buf_id, opts.mappings and opts.mappings.go_in_vertical_plus or "<C-w>V", "vertical", true)
+        -- Short aliases for splits (s/v keep explorer open, S/V close it)
+        map_split(buf_id, "s", "horizontal", false)
+        map_split(buf_id, "v", "vertical", false)
+        map_split(buf_id, "S", "horizontal", true)
+        map_split(buf_id, "V", "vertical", true)
       end,
     })
 

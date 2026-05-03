@@ -1,7 +1,8 @@
 return {
   "nvim-lualine/lualine.nvim",
+  event = "VeryLazy",
   dependencies = {
-    "ellisonleao/gruvbox.nvim", -- 👈 this ensures it's loaded first
+    "ellisonleao/gruvbox.nvim",
   },
   config = function()
     require("lualine").setup({
@@ -9,7 +10,7 @@ return {
         icons_enabled = true,
         component_separators = "|",
         section_separators = "",
-        theme = "gruvbox", -- now this should be safe!
+        theme = "gruvbox",
       },
       sections = {
         lualine_x = {
@@ -20,9 +21,7 @@ return {
           },
         },
         lualine_a = {
-          {
-            "buffers",
-          },
+          { "buffers" },
         },
       },
     })
